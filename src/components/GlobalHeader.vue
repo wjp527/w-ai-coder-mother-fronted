@@ -22,7 +22,28 @@
       <!-- 右侧：用户操作区域 -->
       <a-col>
         <div class="user-login-status">
-          <a-button type="primary">登录</a-button>
+          <div v-if="loginUserStore.loginUser.id">
+            <a-space>
+              <a-avatar :src="loginUserStore.loginUser.userAvatar" />
+              <a-dropdown>
+                <a class="ant-dropdown-link" @click.prevent>
+                  {{ loginUserStore.loginUser.userName }}
+                  <DownOutlined />
+                </a>
+                <template #overlay>
+                  <a-menu>
+                    <a-menu-item @click="nextToUserCenter">
+                      <a>个人中心</a>
+                    </a-menu-item>
+                    <a-menu-item @click="logout">
+                      <a>退出登录</a>
+                    </a-menu-item>
+                  </a-menu>
+                </template>
+              </a-dropdown>
+            </a-space>
+          </div>
+          <a-button v-else type="primary" @click="login">登录</a-button>
         </div>
       </a-col>
     </a-row>
@@ -30,9 +51,13 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref } from 'vue'
+import { computed, h, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import type { MenuProps } from 'ant-design-vue'
+import { message, type MenuProps } from 'ant-design-vue'
+import { useLoginUserStore } from '@/stores/loginUser'
+import { DownOutlined } from '@ant-design/icons-vue'
+import { userLogout } from '@/api/userController'
+const loginUserStore = useLoginUserStore()
 
 const router = useRouter()
 // 当前选中菜单
@@ -43,7 +68,7 @@ router.afterEach((to, from, next) => {
 })
 
 // 菜单配置项
-const menuItems = ref([
+const orginItems = ref([
   {
     key: '/',
     label: '首页',
@@ -53,6 +78,11 @@ const menuItems = ref([
     key: '/about',
     label: '关于',
     title: '关于我们',
+  },
+  {
+    key: '/admin/userManage',
+    label: '用户管理',
+    title: '用户管理',
   },
   {
     key: 'others',
@@ -70,6 +100,47 @@ const handleMenuClick: MenuProps['onClick'] = (e) => {
     router.push(key)
   }
 }
+
+// 登录
+const login = async () => {
+  router.push('/user/login')
+}
+
+// 个人中心
+const nextToUserCenter = () => {
+  router.push('/user/center')
+}
+
+// 退出登录
+const logout = async () => {
+  const res = await userLogout()
+  if (res.data.code == 0) {
+    router.push('/user/login')
+    loginUserStore.setLoginUser({
+      userName: '未登录',
+    })
+    message.success('退出登录成功')
+  } else {
+    message.error('退出登录失败: ' + res.data.message)
+  }
+}
+
+// 过滤菜单项
+const filterMenus = (menus = [] as MenuProps['items']) => {
+  return menus?.filter((menu) => {
+    const menuKey = menu?.key as string
+    if (menuKey?.startsWith('/admin')) {
+      const loginUser = loginUserStore.loginUser
+      if (!loginUser || loginUser.userRole != 'admin') {
+        return false
+      }
+    }
+    return true
+  })
+}
+
+// 展示在菜单的路由数组
+const menuItems = computed<MenuProps['items']>(() => filterMenus(orginItems.value))
 </script>
 
 <style scoped>
