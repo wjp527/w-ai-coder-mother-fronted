@@ -84,8 +84,8 @@ const handleSubmit = async (values: API.UserRegisterRequest) => {
 </script>
 
 <style scoped>
-#userRegisterPage {
-  max-width: 360px;
+#userRegister {
+  width: 30%;
   margin: 0 auto;
 }
 

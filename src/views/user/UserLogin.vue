@@ -57,6 +57,10 @@ const handleSubmit = async () => {
 </script>
 
 <style scoped>
+#UserLogin {
+  width: 30%;
+  margin: 0 auto;
+}
 #userLoginPage {
   background: white;
   max-width: 720px;

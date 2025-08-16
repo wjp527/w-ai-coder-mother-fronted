@@ -17,6 +17,7 @@
           </template>
           应用详情
         </a-button>
+
         <!-- 部署按钮 -->
         <a-button type="primary" @click="deployApp" :loading="deploying">
           <template #icon>
@@ -24,6 +25,25 @@
           </template>
           部署按钮
         </a-button>
+
+        <a-dropdown>
+          <template #overlay>
+            <a-menu>
+              <a-menu-item
+                :key="item"
+                v-for="item in appInfo?.version"
+                @click="handleMenuClick(item)"
+              >
+                <UserOutlined />
+                V{{ item }}
+              </a-menu-item>
+            </a-menu>
+          </template>
+          <a-button>
+            部署版本
+            <DownOutlined />
+          </a-button>
+        </a-dropdown>
       </div>
     </div>
 
@@ -174,6 +194,9 @@ import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
 import aiAvatar from '@/assets/logo.png'
 import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
+
+// 引入部署路径
+import { getDeployUrl } from '@/config/env'
 
 // 导入图标
 import {
@@ -495,6 +518,15 @@ const deployApp = async () => {
   }
 }
 
+/**
+ * 部署版本
+ * @param key 部署版本
+ */
+const handleMenuClick = (version) => {
+  const key = appInfo.value.deployKey + '/V' + version
+  const url = getDeployUrl(key)
+  window.open(url, '_blank')
+}
 /**
  * 在新窗口打开预览
  */
