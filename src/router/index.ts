@@ -38,6 +38,11 @@ const router = createRouter({
       component: () => import('../views/admin/AppManagePage.vue'),
     },
     {
+      path: '/admin/chatManage',
+      name: '对话管理',
+      component: () => import('../views/admin/ChatManagePage.vue'),
+    },
+    {
       path: '/app/chat/:id',
       name: '应用对话',
       component: () => import('../views/app/AppChatPage.vue'),

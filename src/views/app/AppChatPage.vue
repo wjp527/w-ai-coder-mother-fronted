@@ -1,24 +1,17 @@
-/** * 应用聊天页面 *
-这是网站生成器的核心页面，用户可以通过对话的方式描述需求，AI会生成相应的网站代码 *
-页面分为左右两栏：左侧是对话区域，右侧是网站预览区域 *
-支持实时对话、代码生成、网站预览、应用部署等功能 */
 <template>
   <div id="appChatPage">
-    <!-- 顶部栏：显示应用名称和操作按钮 -->
+    <!-- 顶部栏 -->
     <div class="header-bar">
       <div class="header-left">
         <h1 class="app-name">{{ appInfo?.appName || '网站生成器' }}</h1>
       </div>
       <div class="header-right">
-        <!-- 应用详情按钮 -->
         <a-button type="default" @click="showAppDetail">
           <template #icon>
             <InfoCircleOutlined />
           </template>
           应用详情
         </a-button>
-
-        <!-- 部署按钮 -->
         <a-button type="primary" @click="deployApp" :loading="deploying">
           <template #icon>
             <CloudUploadOutlined />
@@ -47,29 +40,31 @@
       </div>
     </div>
 
-    <!-- 主要内容区域：左侧对话 + 右侧预览 -->
+    <!-- 主要内容区域 -->
     <div class="main-content">
       <!-- 左侧对话区域 -->
       <div class="chat-section">
-        <!-- 消息展示区域 -->
+        <!-- 消息区域 -->
         <div class="messages-container" ref="messagesContainer">
+          <!-- 加载更多按钮 -->
+          <div v-if="hasMoreHistory" class="load-more-container">
+            <a-button type="link" @click="loadMoreHistory" :loading="loadingHistory" size="small">
+              加载更多历史消息
+            </a-button>
+          </div>
           <div v-for="(message, index) in messages" :key="index" class="message-item">
-            <!-- 用户消息 -->
             <div v-if="message.type === 'user'" class="user-message">
               <div class="message-content">{{ message.content }}</div>
               <div class="message-avatar">
                 <a-avatar :src="loginUserStore.loginUser.userAvatar" />
               </div>
             </div>
-            <!-- AI消息 -->
             <div v-else class="ai-message">
               <div class="message-avatar">
                 <a-avatar :src="aiAvatar" />
               </div>
               <div class="message-content">
-                <!-- 使用Markdown渲染器显示AI回复内容 -->
                 <MarkdownRenderer v-if="message.content" :content="message.content" />
-                <!-- 加载状态指示器 -->
                 <div v-if="message.loading" class="loading-indicator">
                   <a-spin size="small" />
                   <span>AI 正在思考...</span>
@@ -82,7 +77,6 @@
         <!-- 用户消息输入框 -->
         <div class="input-container">
           <div class="input-wrapper">
-            <!-- 非所有者用户提示 -->
             <a-tooltip v-if="!isOwner" title="无法在别人的作品下对话哦~" placement="top">
               <a-textarea
                 v-model:value="userInput"
@@ -93,7 +87,6 @@
                 :disabled="isGenerating || !isOwner"
               />
             </a-tooltip>
-            <!-- 所有者用户输入框 -->
             <a-textarea
               v-else
               v-model:value="userInput"
@@ -103,7 +96,6 @@
               @keydown.enter.prevent="sendMessage"
               :disabled="isGenerating"
             />
-            <!-- 发送按钮 -->
             <div class="input-actions">
               <a-button
                 type="primary"
@@ -119,13 +111,11 @@
           </div>
         </div>
       </div>
-
       <!-- 右侧网页展示区域 -->
       <div class="preview-section">
         <div class="preview-header">
           <h3>生成后的网页展示</h3>
           <div class="preview-actions">
-            <!-- 新窗口打开按钮 -->
             <a-button v-if="previewUrl" type="link" @click="openInNewTab">
               <template #icon>
                 <ExportOutlined />
@@ -135,17 +125,14 @@
           </div>
         </div>
         <div class="preview-content">
-          <!-- 无预览URL时的占位符 -->
           <div v-if="!previewUrl && !isGenerating" class="preview-placeholder">
             <div class="placeholder-icon">🌐</div>
             <p>网站文件生成完成后将在这里展示</p>
           </div>
-          <!-- 生成中的加载状态 -->
           <div v-else-if="isGenerating" class="preview-loading">
             <a-spin size="large" />
             <p>正在生成网站...</p>
           </div>
-          <!-- 网站预览iframe -->
           <iframe
             v-else
             :src="previewUrl"
@@ -185,10 +172,10 @@ import {
   deployApp as deployAppApi,
   deleteApp as deleteAppApi,
 } from '@/api/appController'
+import { listAppChatHistory } from '@/api/chatHistoryController'
 import { CodeGenTypeEnum } from '@/utils/codeGenTypes'
 import request from '@/request'
 
-// 导入组件
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
@@ -197,8 +184,6 @@ import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
 
 // 引入部署路径
 import { getDeployUrl } from '@/config/env'
-
-// 导入图标
 import {
   CloudUploadOutlined,
   SendOutlined,
@@ -206,38 +191,41 @@ import {
   InfoCircleOutlined,
 } from '@ant-design/icons-vue'
 
-// 路由和状态管理
 const route = useRoute()
 const router = useRouter()
 const loginUserStore = useLoginUserStore()
 
-// ==================== 响应式数据定义 ====================
-
-// 应用信息相关
-const appInfo = ref<API.AppVO>() // 当前应用信息
-const appId = ref<string>() // 应用ID
+// 应用信息
+const appInfo = ref<API.AppVO>()
+const appId = ref<any>()
 
 // 对话相关
 interface Message {
-  type: 'user' | 'ai' // 消息类型：用户或AI
-  content: string // 消息内容
-  loading?: boolean // 是否正在加载
+  type: 'user' | 'ai'
+  content: string
+  loading?: boolean
+  createTime?: string
 }
 
-const messages = ref<Message[]>([]) // 对话消息列表
-const userInput = ref('') // 用户输入内容
-const isGenerating = ref(false) // 是否正在生成代码
-const messagesContainer = ref<HTMLElement>() // 消息容器DOM引用
-const hasInitialConversation = ref(false) // 标记是否已经进行过初始对话
+const messages = ref<Message[]>([])
+const userInput = ref('')
+const isGenerating = ref(false)
+const messagesContainer = ref<HTMLElement>()
+
+// 对话历史相关
+const loadingHistory = ref(false)
+const hasMoreHistory = ref(false)
+const lastCreateTime = ref<string>()
+const historyLoaded = ref(false)
 
 // 预览相关
-const previewUrl = ref('') // 预览URL
-const previewReady = ref(false) // 预览是否准备就绪
+const previewUrl = ref('')
+const previewReady = ref(false)
 
 // 部署相关
-const deploying = ref(false) // 是否正在部署
-const deployModalVisible = ref(false) // 部署成功弹窗显示状态
-const deployUrl = ref('') // 部署后的URL
+const deploying = ref(false)
+const deployModalVisible = ref(false)
+const deployUrl = ref('')
 
 // 权限相关
 const isOwner = computed(() => {
@@ -249,22 +237,68 @@ const isAdmin = computed(() => {
 })
 
 // 应用详情相关
-const appDetailVisible = ref(false) // 应用详情弹窗显示状态
+const appDetailVisible = ref(false)
 
-// ==================== 方法定义 ====================
-
-/**
- * 显示应用详情弹窗
- */
+// 显示应用详情
 const showAppDetail = () => {
   appDetailVisible.value = true
 }
 
-/**
- * 获取应用信息
- * 从路由参数中获取应用ID，调用API获取应用详情
- * 如果是首次访问且有初始提示词，会自动发送初始消息
- */
+// 加载对话历史
+const loadChatHistory = async (isLoadMore = false) => {
+  if (!appId.value || loadingHistory.value) return
+  loadingHistory.value = true
+  try {
+    const params: API.listAppChatHistoryParams = {
+      appId: appId.value,
+      pageSize: 10,
+    }
+    // 如果是加载更多，传递最后一条消息的创建时间作为游标
+    if (isLoadMore && lastCreateTime.value) {
+      params.lastCreateTime = lastCreateTime.value
+    }
+    const res = await listAppChatHistory(params)
+    if (res.data.code === 0 && res.data.data) {
+      const chatHistories = res.data.data.records || []
+      if (chatHistories.length > 0) {
+        // 将对话历史转换为消息格式，并按时间正序排列（老消息在前）
+        const historyMessages: Message[] = chatHistories
+          .map((chat) => ({
+            type: (chat.messageType === 'user' ? 'user' : 'ai') as 'user' | 'ai',
+            content: chat.message || '',
+            createTime: chat.createTime,
+          }))
+          .reverse() // 反转数组，让老消息在前
+        if (isLoadMore) {
+          // 加载更多时，将历史消息添加到开头
+          messages.value.unshift(...historyMessages)
+        } else {
+          // 初始加载，直接设置消息列表
+          messages.value = historyMessages
+        }
+        // 更新游标
+        lastCreateTime.value = chatHistories[chatHistories.length - 1]?.createTime
+        // 检查是否还有更多历史
+        hasMoreHistory.value = chatHistories.length === 10
+      } else {
+        hasMoreHistory.value = false
+      }
+      historyLoaded.value = true
+    }
+  } catch (error) {
+    console.error('加载对话历史失败：', error)
+    message.error('加载对话历史失败')
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
+// 加载更多历史消息
+const loadMoreHistory = async () => {
+  await loadChatHistory(true)
+}
+
+// 获取应用信息
 const fetchAppInfo = async () => {
   const id = route.params.id as string
   if (!id) {
@@ -280,12 +314,20 @@ const fetchAppInfo = async () => {
     if (res.data.code === 0 && res.data.data) {
       appInfo.value = res.data.data
 
-      // 检查是否有view=1参数，如果有则不自动发送初始提示词
-      const isViewMode = route.query.view === '1'
-
-      // 自动发送初始提示词（除非是查看模式或已经进行过初始对话）
-      if (appInfo.value.initPrompt && !isViewMode && !hasInitialConversation.value) {
-        hasInitialConversation.value = true
+      // 先加载对话历史
+      await loadChatHistory()
+      // 如果有至少2条对话记录，展示对应的网站
+      if (messages.value.length >= 2) {
+        updatePreview()
+      }
+      // 检查是否需要自动发送初始提示词
+      // 只有在是自己的应用且没有对话历史时才自动发送
+      if (
+        appInfo.value.initPrompt &&
+        isOwner.value &&
+        messages.value.length === 0 &&
+        historyLoaded.value
+      ) {
         await sendInitialMessage(appInfo.value.initPrompt)
       }
     } else {
@@ -299,11 +341,7 @@ const fetchAppInfo = async () => {
   }
 }
 
-/**
- * 发送初始消息
- * 用于应用首次加载时自动发送预设的提示词
- * @param prompt 初始提示词内容
- */
+// 发送初始消息
 const sendInitialMessage = async (prompt: string) => {
   // 添加用户消息
   messages.value.push({
@@ -327,10 +365,7 @@ const sendInitialMessage = async (prompt: string) => {
   await generateCode(prompt, aiMessageIndex)
 }
 
-/**
- * 发送用户消息
- * 处理用户输入并发送给AI进行代码生成
- */
+// 发送消息
 const sendMessage = async () => {
   if (!userInput.value.trim() || isGenerating.value) {
     return
@@ -361,12 +396,7 @@ const sendMessage = async () => {
   await generateCode(message, aiMessageIndex)
 }
 
-/**
- * 生成代码 - 使用 EventSource 处理流式响应
- * 通过Server-Sent Events接收AI的实时回复
- * @param userMessage 用户输入的消息
- * @param aiMessageIndex AI消息在消息列表中的索引
- */
+// 生成代码 - 使用 EventSource 处理流式响应
 const generateCode = async (userMessage: string, aiMessageIndex: number) => {
   let eventSource: EventSource | null = null
   let streamCompleted = false
@@ -450,12 +480,7 @@ const generateCode = async (userMessage: string, aiMessageIndex: number) => {
   }
 }
 
-/**
- * 错误处理函数
- * 统一处理代码生成过程中的各种错误
- * @param error 错误对象
- * @param aiMessageIndex AI消息索引
- */
+// 错误处理函数
 const handleError = (error: unknown, aiMessageIndex: number) => {
   console.error('生成代码失败：', error)
   messages.value[aiMessageIndex].content = '抱歉，生成过程中出现了错误，请重试。'
@@ -464,10 +489,7 @@ const handleError = (error: unknown, aiMessageIndex: number) => {
   isGenerating.value = false
 }
 
-/**
- * 更新预览
- * 根据应用ID和代码生成类型生成预览URL
- */
+// 更新预览
 const updatePreview = () => {
   if (appId.value) {
     const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
@@ -477,20 +499,14 @@ const updatePreview = () => {
   }
 }
 
-/**
- * 滚动到底部
- * 确保最新的消息始终可见
- */
+// 滚动到底部
 const scrollToBottom = () => {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
   }
 }
 
-/**
- * 部署应用
- * 调用部署API将生成的应用部署到线上环境
- */
+// 部署应用
 const deployApp = async () => {
   if (!appId.value) {
     message.error('应用ID不存在')
@@ -517,7 +533,6 @@ const deployApp = async () => {
     deploying.value = false
   }
 }
-
 /**
  * 部署版本
  * @param key 部署版本
@@ -525,47 +540,35 @@ const deployApp = async () => {
 const handleMenuClick = (version) => {
   const key = appInfo.value.deployKey + '/V' + version
   const url = getDeployUrl(key)
+  console.log(url, 'url')
   window.open(url, '_blank')
 }
-/**
- * 在新窗口打开预览
- */
 const openInNewTab = () => {
   if (previewUrl.value) {
     window.open(previewUrl.value, '_blank')
   }
 }
 
-/**
- * 打开部署的网站
- */
+// 打开部署的网站
 const openDeployedSite = () => {
   if (deployUrl.value) {
     window.open(deployUrl.value, '_blank')
   }
 }
 
-/**
- * iframe加载完成回调
- */
+// iframe加载完成
 const onIframeLoad = () => {
   previewReady.value = true
 }
 
-/**
- * 编辑应用
- * 跳转到应用编辑页面
- */
+// 编辑应用
 const editApp = () => {
   if (appInfo.value?.id) {
     router.push(`/app/edit/${appInfo.value.id}`)
   }
 }
 
-/**
- * 删除应用
- * 调用删除API删除当前应用
- */
+// 删除应用
 const deleteApp = async () => {
   if (!appInfo.value?.id) return
 
@@ -584,27 +587,18 @@ const deleteApp = async () => {
   }
 }
 
-// ==================== 生命周期钩子 ====================
-
-/**
- * 页面加载时获取应用信息
- */
+// 页面加载时获取应用信息
 onMounted(() => {
   fetchAppInfo()
 })
 
-/**
- * 清理资源
- * EventSource 会在组件卸载时自动清理
- */
+// 清理资源
 onUnmounted(() => {
   // EventSource 会在组件卸载时自动清理
 })
 </script>
 
 <style scoped>
-/* ==================== 页面整体布局 ==================== */
-
 #appChatPage {
   height: 100vh;
   display: flex;
@@ -613,8 +607,7 @@ onUnmounted(() => {
   background: #fdfdfd;
 }
 
-/* ==================== 顶部栏样式 ==================== */
-
+/* 顶部栏 */
 .header-bar {
   display: flex;
   justify-content: space-between;
@@ -640,8 +633,7 @@ onUnmounted(() => {
   gap: 12px;
 }
 
-/* ==================== 主要内容区域样式 ==================== */
-
+/* 主要内容区域 */
 .main-content {
   flex: 1;
   display: flex;
@@ -650,8 +642,7 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* ==================== 左侧对话区域样式 ==================== */
-
+/* 左侧对话区域 */
 .chat-section {
   flex: 2;
   display: flex;
@@ -662,7 +653,6 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* 消息容器样式 */
 .messages-container {
   flex: 1;
   padding: 16px;
@@ -674,7 +664,6 @@ onUnmounted(() => {
   margin-bottom: 12px;
 }
 
-/* 用户消息样式 */
 .user-message {
   display: flex;
   justify-content: flex-end;
@@ -682,7 +671,6 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-/* AI消息样式 */
 .ai-message {
   display: flex;
   justify-content: flex-start;
@@ -690,7 +678,6 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-/* 消息内容样式 */
 .message-content {
   max-width: 70%;
   padding: 12px 16px;
@@ -699,25 +686,21 @@ onUnmounted(() => {
   word-wrap: break-word;
 }
 
-/* 用户消息内容样式 */
 .user-message .message-content {
   background: #1890ff;
   color: white;
 }
 
-/* AI消息内容样式 */
 .ai-message .message-content {
   background: #f5f5f5;
   color: #1a1a1a;
   padding: 8px 12px;
 }
 
-/* 消息头像样式 */
 .message-avatar {
   flex-shrink: 0;
 }
 
-/* 加载指示器样式 */
 .loading-indicator {
   display: flex;
   align-items: center;
@@ -725,8 +708,14 @@ onUnmounted(() => {
   color: #666;
 }
 
-/* ==================== 输入区域样式 ==================== */
+/* 加载更多按钮 */
+.load-more-container {
+  text-align: center;
+  padding: 8px 0;
+  margin-bottom: 16px;
+}
 
+/* 输入区域 */
 .input-container {
   padding: 16px;
   background: white;
@@ -746,8 +735,7 @@ onUnmounted(() => {
   right: 8px;
 }
 
-/* ==================== 右侧预览区域样式 ==================== */
-
+/* 右侧预览区域 */
 .preview-section {
   flex: 3;
   display: flex;
@@ -758,7 +746,6 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* 预览头部样式 */
 .preview-header {
   display: flex;
   justify-content: space-between;
@@ -778,14 +765,12 @@ onUnmounted(() => {
   gap: 8px;
 }
 
-/* 预览内容区域样式 */
 .preview-content {
   flex: 1;
   position: relative;
   overflow: hidden;
 }
 
-/* 预览占位符样式 */
 .preview-placeholder {
   display: flex;
   flex-direction: column;
@@ -800,7 +785,6 @@ onUnmounted(() => {
   margin-bottom: 16px;
 }
 
-/* 预览加载状态样式 */
 .preview-loading {
   display: flex;
   flex-direction: column;
@@ -814,15 +798,13 @@ onUnmounted(() => {
   margin-top: 16px;
 }
 
-/* 预览iframe样式 */
 .preview-iframe {
   width: 100%;
   height: 100%;
   border: none;
 }
 
-/* ==================== 响应式设计 ==================== */
-
+/* 响应式设计 */
 @media (max-width: 1024px) {
   .main-content {
     flex-direction: column;

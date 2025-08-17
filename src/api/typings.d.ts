@@ -91,9 +91,21 @@ declare namespace API {
     message?: string
   }
 
+  type BaseResponseMapStringString = {
+    code?: number
+    data?: Record<string, any>
+    message?: string
+  }
+
   type BaseResponsePageAppVO = {
     code?: number
     data?: PageAppVO
+    message?: string
+  }
+
+  type BaseResponsePageChatHistory = {
+    code?: number
+    data?: PageChatHistory
     message?: string
   }
 
@@ -121,6 +133,31 @@ declare namespace API {
     message?: string
   }
 
+  type ChatHistory = {
+    id?: number
+    message?: string
+    messageType?: string
+    appId?: number
+    parentId?: number
+    userId?: number
+    createTime?: string
+    updateTime?: string
+    isDelete?: number
+  }
+
+  type ChatHistoryQueryRequest = {
+    pageNum?: number
+    pageSize?: number
+    sortField?: string
+    sortOrder?: string
+    id?: number
+    message?: string
+    messageType?: string
+    appId?: number
+    userId?: number
+    lastCreateTime?: string
+  }
+
   type chatToGenCodeParams = {
     appId: number
     message: string
@@ -138,6 +175,10 @@ declare namespace API {
     id: number
   }
 
+  type getCodeSnippetsParams = {
+    appId: number
+  }
+
   type getInfo1Params = {
     id: number
   }
@@ -148,6 +189,12 @@ declare namespace API {
 
   type getVOParams = {
     id: number
+  }
+
+  type listAppChatHistoryParams = {
+    appId: number
+    pageSize?: number
+    lastCreateTime?: string
   }
 
   type LoginUserVO = {
@@ -183,6 +230,15 @@ declare namespace API {
     optimizeCountQuery?: boolean
   }
 
+  type PageChatHistory = {
+    records?: ChatHistory[]
+    pageNumber?: number
+    pageSize?: number
+    totalPage?: number
+    totalRow?: number
+    optimizeCountQuery?: boolean
+  }
+
   type pageParams = {
     page: PageUser
   }
@@ -210,6 +266,14 @@ declare namespace API {
   }
 
   type ServerSentEventString = true
+
+  type serveStaticDeployResourceParams = {
+    deployKey: string
+  }
+
+  type serveStaticPreviewResourceParams = {
+    fileName: string
+  }
 
   type User = {
     id?: number
