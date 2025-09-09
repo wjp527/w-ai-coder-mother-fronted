@@ -2,6 +2,8 @@
  * 环境变量配置
  */
 
+import { CodeGenTypeEnum } from "@/utils/codeGenTypes"
+
 // 应用部署域名
 export const DEPLOY_DOMAIN = import.meta.env.VITE_DEPLOY_DOMAIN || 'http://localhost'
 
@@ -18,5 +20,13 @@ export const getDeployUrl = (deployKey: string) => {
 
 // 获取静态资源预览URL
 export const getStaticPreviewUrl = (codeGenType: string, appId: string) => {
-  return `${STATIC_BASE_URL}/preview/${codeGenType}_${appId}/`
+  // 普通项目[单文件/多文件]
+  let baseUrl = `${STATIC_BASE_URL}/preview/${codeGenType}_${appId}/`
+  // Vue 项目模式
+  console.log(codeGenType, 'codeGenType')
+  if (codeGenType == CodeGenTypeEnum.VUE_PROJECT) {
+    baseUrl = `${baseUrl}dist/index.html`
+  }
+
+  return baseUrl
 }
