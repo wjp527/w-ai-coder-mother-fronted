@@ -15,6 +15,11 @@
           <span class="info-label">创建时间：</span>
           <span>{{ formatTime(app?.createTime) }}</span>
         </div>
+        <!-- 生成类型 -->
+        <div class="info-item">
+          <span class="info-label">生成类型：</span>
+          <span>{{ formatCodeGenType(app?.codeGenType) }}</span>
+        </div>
       </div>
 
       <!-- 操作按钮区域（仅本人或管理员可见） -->
@@ -52,6 +57,7 @@ import { computed } from 'vue'
 import { EditOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import UserInfo from './UserInfo.vue'
 import { formatTime } from '@/utils/time'
+import { formatCodeGenType } from '@/utils/codeGenTypes'
 
 /**
  * 组件属性定义

@@ -3,7 +3,12 @@
     <!-- 顶部栏 -->
     <div class="header-bar">
       <div class="header-left">
-        <h1 class="app-name">{{ appInfo?.appName || '网站生成器' }}</h1>
+        <div class="app-title">
+          <h1 class="app-name">{{ appInfo?.appName || '网站生成器' }}</h1>
+          <a-tag v-if="appInfo?.codeGenType" class="code-gen-tag">
+            {{ formatCodeGenType(appInfo?.codeGenType) }} 00 {{ appInfo.id }}
+          </a-tag>
+        </div>
       </div>
       <div class="header-right">
         <a-button type="default" @click="showAppDetail">
@@ -180,7 +185,7 @@ import {
 } from '@/api/appController'
 import { downloadProject } from '@/api/projectDownloadController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
-import { CodeGenTypeEnum } from '@/utils/codeGenTypes'
+import { CodeGenTypeEnum, formatCodeGenType } from '@/utils/codeGenTypes'
 import request from '@/request'
 
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
@@ -560,14 +565,17 @@ const openInNewTab = () => {
 
 // 下载代码
 const downloadCode = async () => {
-  if (!appId.value) {
+  if (!appInfo.value.id) {
     message.error('应用ID不存在')
     return
   }
 
   downloading.value = true
   try {
-    const res = await downloadProject({ appId: Number(appId.value) }, { responseType: 'blob' })
+    const res = await downloadProject(
+      { appId: appInfo.value.id as unknown as number },
+      { responseType: 'blob' },
+    )
 
     const disposition = res.headers['content-disposition'] || res.headers['Content-Disposition']
     let fileName = `${appInfo.value?.appName || 'app'}-code.zip`
@@ -672,6 +680,16 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.app-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.code-gen-tag {
+  font-size: 12px;
 }
 
 .app-name {
