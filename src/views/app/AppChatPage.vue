@@ -12,6 +12,12 @@
           </template>
           应用详情
         </a-button>
+        <a-button type="default" @click="downloadCode" :loading="downloading">
+          <template #icon>
+            <DownloadOutlined />
+          </template>
+          下载代码
+        </a-button>
         <a-button type="primary" @click="deployApp" :loading="deploying">
           <template #icon>
             <CloudUploadOutlined />
@@ -172,6 +178,7 @@ import {
   deployApp as deployAppApi,
   deleteApp as deleteAppApi,
 } from '@/api/appController'
+import { downloadProject } from '@/api/projectDownloadController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
 import { CodeGenTypeEnum } from '@/utils/codeGenTypes'
 import request from '@/request'
@@ -189,6 +196,7 @@ import {
   SendOutlined,
   ExportOutlined,
   InfoCircleOutlined,
+  DownloadOutlined,
 } from '@ant-design/icons-vue'
 
 const route = useRoute()
@@ -197,7 +205,7 @@ const loginUserStore = useLoginUserStore()
 
 // 应用信息
 const appInfo = ref<API.AppVO>()
-const appId = ref<any>()
+const appId = ref('')
 
 // 对话相关
 interface Message {
@@ -226,6 +234,7 @@ const previewReady = ref(false)
 const deploying = ref(false)
 const deployModalVisible = ref(false)
 const deployUrl = ref('')
+const downloading = ref(false)
 
 // 权限相关
 const isOwner = computed(() => {
@@ -546,6 +555,50 @@ const handleMenuClick = (version) => {
 const openInNewTab = () => {
   if (previewUrl.value) {
     window.open(previewUrl.value, '_blank')
+  }
+}
+
+// 下载代码
+const downloadCode = async () => {
+  if (!appId.value) {
+    message.error('应用ID不存在')
+    return
+  }
+
+  downloading.value = true
+  try {
+    const res = await downloadProject({ appId: Number(appId.value) }, { responseType: 'blob' })
+
+    const disposition = res.headers['content-disposition'] || res.headers['Content-Disposition']
+    let fileName = `${appInfo.value?.appName || 'app'}-code.zip`
+
+    if (disposition) {
+      const utf8Match = disposition.match(/filename\*\=UTF-8''([^;]+)/i)
+      const asciiMatch = disposition.match(/filename=\"?([^\";]+)\"?/i)
+      if (utf8Match && utf8Match[1]) {
+        fileName = decodeURIComponent(utf8Match[1])
+      } else if (asciiMatch && asciiMatch[1]) {
+        fileName = asciiMatch[1]
+      }
+    }
+
+    const blob = new Blob([res.data], { type: 'application/zip' })
+    const url = window.URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', fileName)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+
+    message.success('代码开始下载')
+  } catch (error) {
+    console.error('下载失败：', error)
+    message.error('下载失败，请重试')
+  } finally {
+    downloading.value = false
   }
 }
 
