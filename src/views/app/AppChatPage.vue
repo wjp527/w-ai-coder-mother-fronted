@@ -88,6 +88,16 @@
         <!-- 用户消息输入框 -->
         <div class="input-container">
           <div class="input-wrapper">
+            <div v-if="selectedElementInfo" class="selection-alert">
+              <a-alert
+                type="info"
+                show-icon
+                closable
+                :message="`已选中元素：${selectedElementInfo.tagName}`"
+                :description="selectedElementDescription"
+                @close="handleSelectedElementClose"
+              />
+            </div>
             <a-tooltip v-if="!isOwner" title="无法在别人的作品下对话哦~" placement="top">
               <a-textarea
                 v-model:value="userInput"
@@ -127,6 +137,19 @@
         <div class="preview-header">
           <h3>生成后的网页展示</h3>
           <div class="preview-actions">
+            <a-tooltip title="开启可视化编辑模式" placement="top">
+              <a-button
+                :type="isEditMode ? 'primary' : 'default'"
+                :ghost="isEditMode"
+                :disabled="!isOwner || !previewReady"
+                @click="toggleEditMode"
+              >
+                <template #icon>
+                  <EditOutlined />
+                </template>
+                编辑模式
+              </a-button>
+            </a-tooltip>
             <a-button v-if="previewUrl" type="link" @click="openInNewTab">
               <template #icon>
                 <ExportOutlined />
@@ -147,6 +170,7 @@
           <iframe
             v-else
             :src="previewUrl"
+            ref="previewIframe"
             class="preview-iframe"
             frameborder="0"
             @load="onIframeLoad"
@@ -174,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, onUnmounted, computed } from 'vue'
+import { ref, onMounted, nextTick, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useLoginUserStore } from '@/stores/loginUser'
@@ -202,7 +226,12 @@ import {
   ExportOutlined,
   InfoCircleOutlined,
   DownloadOutlined,
+  EditOutlined,
 } from '@ant-design/icons-vue'
+import {
+  createVisualEditorBridge,
+  type VisualEditorSelectedElement,
+} from '@/utils/visualEditorBridge'
 
 const route = useRoute()
 const router = useRouter()
@@ -234,6 +263,7 @@ const historyLoaded = ref(false)
 // 预览相关
 const previewUrl = ref('')
 const previewReady = ref(false)
+const previewIframe = ref<HTMLIFrameElement | null>(null)
 
 // 部署相关
 const deploying = ref(false)
@@ -253,10 +283,110 @@ const isAdmin = computed(() => {
 // 应用详情相关
 const appDetailVisible = ref(false)
 
+// 可视化编辑
+const isEditMode = ref(false)
+const selectedElementInfo = ref<VisualEditorSelectedElement | null>(null)
+
+const postSelectionToHost = (payload: VisualEditorSelectedElement | null) => {
+  if (typeof window === 'undefined') return
+  try {
+    const targetWindow = window.parent === window ? window : window.parent
+    targetWindow.postMessage(
+      {
+        type: payload ? 'visual-editor-element-selected' : 'visual-editor-element-cleared',
+        payload,
+      },
+      window.location.origin,
+    )
+  } catch (error) {
+    console.warn('postMessage 发送失败', error)
+  }
+}
+
+const visualEditorBridge = createVisualEditorBridge({
+  onSelectionChange: (info) => {
+    selectedElementInfo.value = info
+    postSelectionToHost(info)
+  },
+})
+
+const handleBridgeEnableFailure = () => {
+  const errorType = visualEditorBridge.getLastError?.()
+  if (errorType === 'cross-origin') {
+    message.error('当前预览页面与主站域名不一致，无法开启可视化编辑')
+  } else if (errorType === 'not-ready') {
+    message.warning('网页尚未加载完成，暂无法进入编辑模式')
+  } else {
+    message.warning('暂无法进入编辑模式，请稍后重试')
+  }
+}
+
+const selectedElementDescription = computed(() => {
+  if (!selectedElementInfo.value) return ''
+  const info = selectedElementInfo.value
+  const detail: string[] = []
+  if (info.id) {
+    detail.push(`ID: ${info.id}`)
+  }
+  if (info.className) {
+    detail.push(`Class: ${info.className}`)
+  }
+  if (info.path) {
+    detail.push(`路径: ${info.path}`)
+  }
+  if (info.textContent) {
+    detail.push(`文本: ${info.textContent}`)
+  }
+  return detail.join(' | ')
+})
+
 // 显示应用详情
 const showAppDetail = () => {
   appDetailVisible.value = true
 }
+
+const toggleEditMode = () => {
+  if (!isOwner.value) {
+    message.warning('只能在自己的应用中进行可视化编辑')
+    return
+  }
+  if (!previewReady.value) {
+    message.warning('请先生成并加载网页后再进入编辑模式')
+    return
+  }
+  isEditMode.value = !isEditMode.value
+}
+
+const handleSelectedElementClose = () => {
+  visualEditorBridge.clearSelection()
+}
+
+watch(
+  () => isEditMode.value,
+  (active) => {
+    if (active) {
+      visualEditorBridge.setIframe(previewIframe.value)
+      const enabled = visualEditorBridge.enable()
+      if (!enabled) {
+        handleBridgeEnableFailure()
+        isEditMode.value = false
+      } else {
+        message.success('已进入编辑模式，点击网页元素即可选中')
+      }
+    } else {
+      visualEditorBridge.disable()
+    }
+  },
+)
+
+watch(
+  () => previewUrl.value,
+  () => {
+    previewReady.value = false
+    visualEditorBridge.disable()
+    visualEditorBridge.clearSelection()
+  },
+)
 
 // 加载对话历史
 const loadChatHistory = async (isLoadMore = false) => {
@@ -379,6 +509,38 @@ const sendInitialMessage = async (prompt: string) => {
   await generateCode(prompt, aiMessageIndex)
 }
 
+const cloneSelectionInfo = (info: VisualEditorSelectedElement | null) => {
+  if (!info) return null
+  return {
+    ...info,
+    attributes: { ...info.attributes },
+  }
+}
+
+const buildPromptWithSelection = (
+  baseMessage: string,
+  selection: VisualEditorSelectedElement | null,
+) => {
+  if (!selection) return baseMessage
+  const detailLines = [`【可视化选中元素信息】`, `- 元素路径：${selection.path}`]
+  if (selection.id) {
+    detailLines.push(`- 元素ID：${selection.id}`)
+  }
+  if (selection.className) {
+    detailLines.push(`- 元素类名：${selection.className}`)
+  }
+  if (selection.textContent) {
+    detailLines.push(`- 元素文本：${selection.textContent}`)
+  }
+  const attributes = Object.entries(selection.attributes || {})
+    .map(([key, value]) => `${key}="${value}"`)
+    .join(', ')
+  if (attributes) {
+    detailLines.push(`- 元素属性：${attributes}`)
+  }
+  return `${baseMessage}\n\n${detailLines.join('\n')}`
+}
+
 // 发送消息
 const sendMessage = async () => {
   if (!userInput.value.trim() || isGenerating.value) {
@@ -387,6 +549,12 @@ const sendMessage = async () => {
 
   const message = userInput.value.trim()
   userInput.value = ''
+
+  const selectionSnapshot = cloneSelectionInfo(selectedElementInfo.value)
+  const finalPrompt = buildPromptWithSelection(message, selectionSnapshot)
+  if (selectedElementInfo.value) {
+    visualEditorBridge.clearSelection()
+  }
 
   // 添加用户消息
   messages.value.push({
@@ -407,7 +575,7 @@ const sendMessage = async () => {
 
   // 开始生成
   isGenerating.value = true
-  await generateCode(message, aiMessageIndex)
+  await generateCode(finalPrompt, aiMessageIndex)
 }
 
 // 生成代码 - 使用 EventSource 处理流式响应
@@ -504,13 +672,21 @@ const handleError = (error: unknown, aiMessageIndex: number) => {
 }
 
 // 更新预览
-const updatePreview = () => {
-  if (appId.value) {
-    const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
-    const newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
-    previewUrl.value = newPreviewUrl
-    previewReady.value = true
+const buildPreviewUrl = () => {
+  if (!appId.value) {
+    return ''
   }
+  const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
+  const baseUrl = getStaticPreviewUrl(codeGenType, appId.value)
+  const version = Date.now()
+  const separator = baseUrl.includes('?') ? '&' : '?'
+  return `${baseUrl}${separator}t=${version}`
+}
+
+const updatePreview = () => {
+  if (!appId.value) return
+  previewReady.value = false
+  previewUrl.value = buildPreviewUrl()
 }
 
 // 滚动到底部
@@ -620,6 +796,10 @@ const openDeployedSite = () => {
 // iframe加载完成
 const onIframeLoad = () => {
   previewReady.value = true
+  visualEditorBridge.setIframe(previewIframe.value)
+  if (isEditMode.value) {
+    visualEditorBridge.enable()
+  }
 }
 
 // 编辑应用
@@ -655,7 +835,7 @@ onMounted(() => {
 
 // 清理资源
 onUnmounted(() => {
-  // EventSource 会在组件卸载时自动清理
+  visualEditorBridge.destroy()
 })
 </script>
 
@@ -797,7 +977,11 @@ onUnmounted(() => {
 }
 
 .input-wrapper .ant-input {
-  padding-right: 50px;
+  padding-right: 70px;
+}
+
+.selection-alert {
+  margin-bottom: 12px;
 }
 
 .input-actions {
